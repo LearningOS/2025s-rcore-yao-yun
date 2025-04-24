@@ -17,6 +17,7 @@ mod task;
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use crate::syscall::SYSCALL_MAX;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -45,6 +46,7 @@ pub struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
     current_task: usize,
+    tasks_syscall_stat: [[usize; SYSCALL_MAX]; MAX_APP_NUM],
 }
 
 lazy_static! {
@@ -65,6 +67,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    tasks_syscall_stat: [[0; SYSCALL_MAX]; MAX_APP_NUM],
                 })
             },
         }
@@ -135,6 +138,26 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Get task syscall statistics
+    fn get_current_task_syscall_stat(&self, syscall: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks_syscall_stat[current][syscall]
+    }
+
+    /// Update task syscall statistics and return the updated value.
+    fn update_current_task_syscall_stat<F>(&self, syscall: usize, update: F) -> usize
+    where
+        F: Fn(usize) -> usize,
+    {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let old_count = inner.tasks_syscall_stat[current][syscall];
+        inner.tasks_syscall_stat[current][syscall] = update(old_count);
+        inner.tasks_syscall_stat[current][syscall]
+    }
+
 }
 
 /// Run the first task in task list.
@@ -168,4 +191,17 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Get task syscall statistics
+pub fn get_current_task_syscall_stat(syscall: usize) -> usize {
+    TASK_MANAGER.get_current_task_syscall_stat(syscall)
+}
+
+/// Update task syscall statistics and return the updated value.
+pub fn update_current_task_syscall_stat<F>(syscall: usize, update: F) -> usize
+where
+    F: Fn(usize) -> usize,
+{
+        TASK_MANAGER.update_current_task_syscall_stat(syscall, update)
 }
