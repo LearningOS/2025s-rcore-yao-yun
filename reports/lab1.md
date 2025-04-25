@@ -9,7 +9,8 @@
   - 新增 TaskManager 的 `get_current_task_syscall_stat` 和 `update_current_task_syscall_stat` 方法，供查询及通过闭包更新。在mod中简单封装后暴露。
 - 在 `crate::syscall` 中
   - 新增`SYSCALL_MAX`以提供系统调用统计数组的长度
-  - 在 `syscall` 函数中，在系统调用成功后更新（+1）调用次数统计。
+  - 在 `syscall` 函数中，在系统调用前更新（+1）调用次数统计。
+    - 注：不合法的系统调用仍然会被统计；从任务来看这是未定义行为。
   - 完成 `sys_trace` 的三种功能实现：读/写当前任务 id 一字节，及获取当前任务系统调用次数。
 
 ## 问答题
