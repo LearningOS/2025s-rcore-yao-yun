@@ -18,6 +18,7 @@ use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
+use crate::syscall::SYSCALL_MAX;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -46,6 +47,7 @@ struct TaskManagerInner {
     tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
     current_task: usize,
+    tasks_syscall_stat: Vec<[usize; SYSCALL_MAX]>,
 }
 
 lazy_static! {
@@ -55,8 +57,10 @@ lazy_static! {
         let num_app = get_num_app();
         println!("num_app = {}", num_app);
         let mut tasks: Vec<TaskControlBlock> = Vec::new();
+        let mut tasks_syscall_stat = Vec::new();
         for i in 0..num_app {
             tasks.push(TaskControlBlock::new(get_app_data(i), i));
+            tasks_syscall_stat.push([0; SYSCALL_MAX]);
         }
         TaskManager {
             num_app,
@@ -64,6 +68,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    tasks_syscall_stat,
                 })
             },
         }
@@ -153,6 +158,26 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Get task syscall statistics
+    fn get_current_task_syscall_stat(&self, syscall: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks_syscall_stat[current][syscall]
+    }
+
+    /// Update task syscall statistics and return the updated value.
+    fn update_current_task_syscall_stat<F>(&self, syscall: usize, update: F) -> usize
+    where
+        F: Fn(usize) -> usize,
+    {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let old_count = inner.tasks_syscall_stat[current][syscall];
+        inner.tasks_syscall_stat[current][syscall] = update(old_count);
+        inner.tasks_syscall_stat[current][syscall]
+    }
+
 }
 
 /// Run the first task in task list.
@@ -188,6 +213,7 @@ pub fn exit_current_and_run_next() {
     run_next_task();
 }
 
+
 /// Get the current 'Running' task's token.
 pub fn current_user_token() -> usize {
     TASK_MANAGER.get_current_token()
@@ -201,4 +227,16 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+/// Get task syscall statistics
+pub fn get_current_task_syscall_stat(syscall: usize) -> usize {
+    TASK_MANAGER.get_current_task_syscall_stat(syscall)
+}
+
+/// Update task syscall statistics and return the updated value.
+pub fn update_current_task_syscall_stat<F>(syscall: usize, update: F) -> usize
+where
+    F: Fn(usize) -> usize,
+{
+    TASK_MANAGER.update_current_task_syscall_stat(syscall, update)
 }
