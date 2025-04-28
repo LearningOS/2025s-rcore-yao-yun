@@ -60,6 +60,8 @@ impl MemorySet {
             None,
         );
     }
+    // TODO: a bit redundant here, refactor still needed
+    
     /// remove a area
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
@@ -75,6 +77,59 @@ impl MemorySet {
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
+    /// Remove the area of [start_va, end_va)
+    /// Return Ok(()) if removed, Err(()) if not found.
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> Result<(), ()> {
+        trace!(
+            "kernel: removing maparea of [{:x?}, {:x?})",
+            start_va,
+            end_va
+        );
+        let mut find_any: bool = false;
+        self.areas.retain_mut(|area| {
+            let retain = !(area.vpn_range.get_start() == start_va.floor()
+                && area.vpn_range.get_end() == end_va.ceil());
+            if !retain {
+                trace!(
+                    "removing maparea of [{:x?}, {:x?})",
+                    area.vpn_range.get_start(),
+                    area.vpn_range.get_end()
+                );
+                find_any = true;
+                area.unmap(&mut self.page_table);
+            }
+            retain
+        });
+        match find_any {
+            true => Ok(()),
+            false => Err(()),
+        }
+    }
+
+    /// allocate specified memory section
+    /// basically just insert_framed_area with check
+    pub fn mmap(&mut self, start: usize, len: usize, prot: MapPermission) -> Result<(), ()> {
+        // loop through covered vpn, check if mapped already
+        for vpn in VPNRange::new(VirtAddr(start).floor(), VirtAddr(start + len).ceil()) {
+            // check if the page is already mapped
+            trace!("checking if vpn {:x?} is mapped", vpn);
+            match self.translate(vpn) {
+                Some(pte) if pte.is_valid() => {
+                    return Err(());
+                }
+                _ => (), // page is not mapped, continue
+            }
+        }
+        // create map for the area
+        self.insert_framed_area(VirtAddr::from(start), VirtAddr::from(start + len), prot);
+        Ok(())
+    }
+
+    /// deallocate the memory
+    pub fn munmap(&mut self, start: usize, len: usize) -> Result<(), ()> {
+        self.remove_framed_area(VirtAddr::from(start), VirtAddr::from(start + len))
+    }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {

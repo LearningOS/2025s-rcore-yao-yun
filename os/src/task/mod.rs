@@ -23,6 +23,12 @@ mod task;
 
 use crate::loader::get_app_data_by_name;
 use alloc::sync::Arc;
+// use crate::loader::{get_app_data, get_num_app};
+// use crate::mm::MapPermission;
+// use crate::sync::UPSafeCell;
+// use crate::syscall::SYSCALL_MAX;
+// use crate::trap::TrapContext;
+// use alloc::vec::Vec;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
@@ -115,3 +121,22 @@ lazy_static! {
 pub fn add_initproc() {
     add_task(INITPROC.clone());
 }
+
+// /// Map a `len` virtual memory area starting from `start` with permission `prot` for current task 
+// pub fn mmap_current_task(
+//     start: usize,
+//     len: usize,
+//     prot: MapPermission,
+// ) -> Result<(), ()> {
+//     let current = TASK_MANAGER.inner.exclusive_access().current_task;
+//     TASK_MANAGER.mmap_task(start, len, prot, current)
+// }
+
+// /// Unmap a `len` virtual memory area starting from `start` for current task 
+// pub fn munmap_current_task(
+//     start: usize,
+//     len: usize,
+// ) -> Result<(), ()> {
+//     let current = TASK_MANAGER.inner.exclusive_access().current_task;
+//     TASK_MANAGER.munmap_task(start, len, current)
+// }

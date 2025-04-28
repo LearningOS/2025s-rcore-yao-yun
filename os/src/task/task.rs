@@ -2,7 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -236,6 +236,20 @@ impl TaskControlBlock {
             None
         }
     }
+
+    /// mmap 
+    pub fn mmap(&self, start: usize, len: usize, prot: MapPermission) -> Result<(), ()> {
+        self.inner_exclusive_access()
+            .memory_set
+            .mmap(start, len, prot)
+    }
+
+    /// munmap
+    pub fn munmap(&self, start: usize, len: usize) -> Result<(), ()> {
+        self.inner_exclusive_access()
+            .memory_set
+            .munmap(start, len)
+    } 
 }
 
 #[derive(Copy, Clone, PartialEq)]
