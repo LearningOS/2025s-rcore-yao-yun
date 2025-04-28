@@ -23,6 +23,7 @@ pub fn init_heap() {
 }
 
 #[allow(unused)]
+/// test function for kernel heap
 pub fn heap_test() {
     use alloc::boxed::Box;
     use alloc::vec::Vec;

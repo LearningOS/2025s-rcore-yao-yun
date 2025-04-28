@@ -15,10 +15,11 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::MapPermission;
 use crate::sync::UPSafeCell;
+use crate::syscall::SYSCALL_MAX;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
-use crate::syscall::SYSCALL_MAX;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -178,6 +179,17 @@ impl TaskManager {
         inner.tasks_syscall_stat[current][syscall]
     }
 
+    /// Map given memory section
+    fn mmap_task(&self, start: usize, len: usize, prot: MapPermission, task: usize) -> Result<(), ()> {
+        let mut inner = self.inner.exclusive_access();
+        inner.tasks[task].memory_set.mmap(start, len, prot)
+    }
+
+    /// Unmap given memory section
+    fn munmap_task(&self, start: usize, len: usize, task: usize) -> Result<(), ()> {
+        let mut inner = self.inner.exclusive_access();
+        inner.tasks[task].memory_set.munmap(start, len)
+    }
 }
 
 /// Run the first task in task list.
@@ -213,7 +225,6 @@ pub fn exit_current_and_run_next() {
     run_next_task();
 }
 
-
 /// Get the current 'Running' task's token.
 pub fn current_user_token() -> usize {
     TASK_MANAGER.get_current_token()
@@ -239,4 +250,23 @@ where
     F: Fn(usize) -> usize,
 {
     TASK_MANAGER.update_current_task_syscall_stat(syscall, update)
+}
+
+/// Map a `len` virtual memory area starting from `start` with permission `prot` for current task 
+pub fn mmap_current_task(
+    start: usize,
+    len: usize,
+    prot: MapPermission,
+) -> Result<(), ()> {
+    let current = TASK_MANAGER.inner.exclusive_access().current_task;
+    TASK_MANAGER.mmap_task(start, len, prot, current)
+}
+
+/// Unmap a `len` virtual memory area starting from `start` for current task 
+pub fn munmap_current_task(
+    start: usize,
+    len: usize,
+) -> Result<(), ()> {
+    let current = TASK_MANAGER.inner.exclusive_access().current_task;
+    TASK_MANAGER.munmap_task(start, len, current)
 }
