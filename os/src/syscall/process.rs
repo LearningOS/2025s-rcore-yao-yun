@@ -188,6 +188,5 @@ pub fn sys_set_priority(prio: isize) -> isize {
     current_task()
         .unwrap()
         .inner_exclusive_access()
-        .set_priority(prio as usize);
-    0
+        .set_priority(prio as usize) as isize
 }

@@ -91,8 +91,9 @@ impl TaskControlBlockInner {
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
-    pub fn set_priority(&mut self, priority: usize) {
+    pub fn set_priority(&mut self, priority: usize) -> usize {
         self.priority = priority;
+        self.priority
     }
 }
 
