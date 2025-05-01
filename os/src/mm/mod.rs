@@ -11,6 +11,7 @@ mod frame_allocator;
 mod heap_allocator;
 mod memory_set;
 mod page_table;
+mod user_ref;
 
 use address::VPNRange;
 pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
@@ -22,6 +23,7 @@ pub use page_table::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
     PageTableEntry, UserBuffer, UserBufferIterator,
 };
+pub use user_ref::UserRef;
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {

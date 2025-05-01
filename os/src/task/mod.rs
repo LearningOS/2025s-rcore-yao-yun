@@ -18,6 +18,7 @@ mod id;
 mod manager;
 mod processor;
 mod switch;
+mod scheduling;
 #[allow(clippy::module_inception)]
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
