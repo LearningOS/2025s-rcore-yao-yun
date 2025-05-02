@@ -183,4 +183,124 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+
+    /// Create a hardlink under current inode to another inode
+    pub fn link(&self, old_name: &str, new_name: &str) -> Option<()> {
+        // if this node is a dir & the new link does not exist?
+        if self.find(new_name).is_some() {
+            return None;
+        }
+
+        // insert the new inode into parent inode
+        let res = self.modify_disk_inode(|disk_dir_inode| {
+            assert!(disk_dir_inode.is_dir());
+            // if the oldname exists?  
+            if let Some(old_inode_id) = self.find_inode_id(old_name, disk_dir_inode) {
+                // append file in the dirent
+                let file_count = (disk_dir_inode.size as usize) / DIRENT_SZ;
+                let new_size = (file_count + 1) * DIRENT_SZ;
+                // increase size
+                let mut fs = self.fs.lock();
+                self.increase_size(new_size as u32, disk_dir_inode, &mut fs);
+                drop(fs);
+                // write dirent
+                let dirent = DirEntry::new(new_name, old_inode_id);
+                disk_dir_inode.write_at(
+                    file_count * DIRENT_SZ,
+                    dirent.as_bytes(),
+                    &self.block_device,
+                );
+                // increase the link counter of the old inode
+                
+                
+                let fs = self.fs.lock();
+                let (old_inode_block_id, old_inode_offset) = fs.get_disk_inode_pos(old_inode_id);
+                drop(fs);
+                get_block_cache(old_inode_block_id as usize, self.block_device.clone())
+                    .lock()
+                    .modify(old_inode_offset, |old_inode: &mut DiskInode| {
+                        old_inode.nlink += 1;
+                    });
+                Some(())
+            } else {
+                None
+            }
+        });
+
+        block_cache_sync_all();
+        res
+    }
+
+    /// Delete a hardlink under the current inode
+    pub fn unlink(&self, name: &str) -> Option<()> {
+        // 3 condition: no file `name`, file linked only once (to delete), file linked multiple times
+        let linked_inode = self.find(name)?; // first condition dealt 
+
+        // firstly deal with the diskinode 
+        let reduced_linked = linked_inode.modify_disk_inode(|disk_inode| {
+            disk_inode.nlink -= 1;
+            disk_inode.nlink
+        });
+
+        // deal with this parent inode: remove the corresponding dirent
+        self.modify_disk_inode(|disk_dir_inode| {
+            assert!(disk_dir_inode.is_dir());
+            // go through all dirents 
+            // construct a dirent iterator first 
+            let file_count = (disk_dir_inode.size as usize) / DIRENT_SZ;
+            let mut dirent_iter = (0..file_count).map(|i| {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_dir_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                );
+                (i, dirent)
+            });
+            // find the dirent to be deleted
+            if let Some((i, _)) = dirent_iter.find(|(_, dirent)| {
+                dirent.name() == name
+            }) {
+                if file_count > 1 { // fill the blank
+                    let mut last_dirent = DirEntry::empty();
+                    disk_dir_inode.read_at((file_count - 1) * DIRENT_SZ, last_dirent.as_bytes_mut(), &self.block_device,);
+                    disk_dir_inode.write_at(
+                        i * DIRENT_SZ,
+                        &last_dirent.as_bytes(),
+                        &self.block_device,
+                    );
+                }
+                disk_dir_inode.size -= DIRENT_SZ as u32; // shrink to 'remove' the last dirent
+            } else {
+                panic!("corrupted inode with dirent!");
+            }
+        });
+
+        // handle the 2nd condition: deletion needed
+        // delete the linked inode, if no longer linked 
+        if reduced_linked == 0 {
+            linked_inode.clear();
+        }
+        
+        Some(())
+    }
+
+    /// Get the block id of the inode
+    pub fn get_block_id(&self) -> usize {
+        self.block_id
+    }
+
+    /// Get the block offset of the inode
+    pub fn get_block_offset(&self) -> usize {
+        self.block_offset
+    }
+
+    /// Is dir 
+    pub fn is_dir(&self) -> bool {
+        self.read_disk_inode(|disk_inode| disk_inode.is_dir())
+    }
+
+    /// Get nlink 
+    pub fn get_nlink(&self) -> u32 {
+        self.read_disk_inode(|disk_inode| disk_inode.nlink)
+    }
 }
