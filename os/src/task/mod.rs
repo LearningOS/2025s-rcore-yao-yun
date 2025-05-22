@@ -12,7 +12,7 @@
 mod context;
 mod id;
 mod manager;
-mod process;
+pub mod process;
 mod processor;
 mod signal;
 mod switch;

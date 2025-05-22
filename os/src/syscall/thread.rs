@@ -41,6 +41,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
         tasks.push(None);
     }
     tasks[new_task_tid] = Some(Arc::clone(&new_task));
+    process_inner.resource_status.track_task(new_task_tid);
     let new_task_trap_cx = new_task_inner.get_trap_cx();
     *new_task_trap_cx = TrapContext::app_init_context(
         entry,
@@ -80,17 +81,17 @@ pub fn sys_gettid() -> isize {
 /// thread has not exited yet, return -2
 /// otherwise, return thread's exit code
 pub fn sys_waittid(tid: usize) -> i32 {
-    trace!(
-        "kernel:pid[{}] tid[{}] sys_waittid",
-        current_task().unwrap().process.upgrade().unwrap().getpid(),
-        current_task()
-            .unwrap()
-            .inner_exclusive_access()
-            .res
-            .as_ref()
-            .unwrap()
-            .tid
-    );
+    // trace!(
+    //     "kernel:pid[{}] tid[{}] sys_waittid",
+    //     current_task().unwrap().process.upgrade().unwrap().getpid(),
+    //     current_task()
+    //         .unwrap()
+    //         .inner_exclusive_access()
+    //         .res
+    //         .as_ref()
+    //         .unwrap()
+    //         .tid
+    // );
     let task = current_task().unwrap();
     let process = task.process.upgrade().unwrap();
     let task_inner = task.inner_exclusive_access();
@@ -112,6 +113,7 @@ pub fn sys_waittid(tid: usize) -> i32 {
     if let Some(exit_code) = exit_code {
         // dealloc the exited thread
         process_inner.tasks[tid] = None;
+        process_inner.resource_status.untrack_task(tid);
         exit_code
     } else {
         // waited thread has not exited

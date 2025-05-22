@@ -5,6 +5,7 @@ use crate::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags,
     },
+    timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -151,12 +152,26 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, tz: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_get_time",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    let pcb = current_process();
+    let inner_pcb = pcb.inner_exclusive_access();
+    let time_us = get_time_us();
+    // Write to user space 
+    let translated_ts = translated_refmut(inner_pcb.memory_set.token(), ts);
+    let timeval = unsafe { &mut *(translated_ts as *mut TimeVal) };
+    timeval.sec = time_us / 1_000_000;
+    timeval.usec = time_us % 1_000_000;
+
+    // write tz of default 0 
+    let translated_tz = translated_refmut(inner_pcb.memory_set.token(), tz as *mut usize);
+    let tz = unsafe { &mut *(translated_tz as *mut usize) }; 
+    *tz = 0;
+
+    0
 }
 
 /// mmap syscall
